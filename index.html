@@ -5521,85 +5521,250 @@
                 `;
 
                 // 3. Trade Execution Card
-                const totalCapital = closed.reduce((s, t) => s + (t.entry_price * (t.quantity || 0)), 0);
-                const avgCapital = closed.length ? totalCapital / closed.length : 0;
-                const mostProfitableStrategy = Object.entries(byStrategy).sort((a, b) => b[1] - a[1])[0];
+                // Enhanced data validation and error handling
+                let totalCapital = 0;
+                let avgCapital = 0;
                 
-                // Calculate consecutive wins/losses
-                let consecutiveWins = 0, consecutiveLosses = 0, maxConsecutiveWins = 0, maxConsecutiveLosses = 0;
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    try {
+                        totalCapital = closed.reduce((s, t) => {
+                            try {
+                                // Validate trade data before calculation
+                                if (!t || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return s;
+                                }
+                                
+                                const capital = t.entry_price * t.quantity;
+                                return isFinite(capital) ? s + capital : s;
+                            } catch (e) {
+                                return s;
+                            }
+                        }, 0);
+                        
+                        avgCapital = isFinite(totalCapital) ? totalCapital / closed.length : 0;
+                    } catch (e) {
+                        console.warn('Error calculating total capital:', e);
+                        totalCapital = 0;
+                        avgCapital = 0;
+                    }
+                }
+
+                // Safe array access with validation for most profitable strategy
+                let mostProfitableStrategy = null;
+                if (byStrategy && typeof byStrategy === 'object') {
+                    try {
+                        const strategyEntries = Object.entries(byStrategy);
+                        if (strategyEntries.length > 0) {
+                            mostProfitableStrategy = [...strategyEntries].sort((a, b) => b[1] - a[1])[0];
+                        }
+                    } catch (e) {
+                        console.warn('Error calculating most profitable strategy:', e);
+                    }
+                }
+                
+                // Calculate consecutive wins/losses with safe data handling
+                let maxConsecutiveWins = 0, maxConsecutiveLosses = 0;
                 let currentWins = 0, currentLosses = 0;
                 
-                closed.sort((a, b) => new Date(a.exit_date) - new Date(b.exit_date)).forEach(t => {
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0);
-                    if (pnl > 0) {
-                        currentWins++;
-                        currentLosses = 0;
-                        maxConsecutiveWins = Math.max(maxConsecutiveWins, currentWins);
-                    } else if (pnl < 0) {
-                        currentLosses++;
-                        currentWins = 0;
-                        maxConsecutiveLosses = Math.max(maxConsecutiveLosses, currentLosses);
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    try {
+                        // Safely sort trades with date validation
+                        const sortedTrades = closed
+                            .filter(t => {
+                                // Validate trade and exit_date before sorting
+                                if (!t || !t.exit_date || typeof t.exit_date !== 'string') {
+                                    return false;
+                                }
+                                const dateObj = new Date(t.exit_date);
+                                return !isNaN(dateObj.getTime());
+                            })
+                            .sort((a, b) => {
+                                try {
+                                    const dateA = new Date(a.exit_date);
+                                    const dateB = new Date(b.exit_date);
+                                    return dateA - dateB;
+                                } catch (e) {
+                                    return 0;
+                                }
+                            });
+                        
+                        sortedTrades.forEach(t => {
+                            try {
+                                // Safely calculate PnL with data validation
+                                if (typeof t.exit_price === 'number' && 
+                                    typeof t.entry_price === 'number' && 
+                                    typeof t.quantity === 'number' && 
+                                    t.quantity > 0) {
+                                    
+                                    const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                    
+                                    if (isFinite(pnl)) {
+                                        if (pnl > 0) {
+                                            currentWins++;
+                                            currentLosses = 0;
+                                            maxConsecutiveWins = Math.max(maxConsecutiveWins, currentWins);
+                                        } else if (pnl < 0) {
+                                            currentLosses++;
+                                            currentWins = 0;
+                                            maxConsecutiveLosses = Math.max(maxConsecutiveLosses, currentLosses);
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Error processing trade for consecutive calculation:', e);
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Error calculating consecutive wins/losses:', e);
                     }
-                });
+                }
 
-                // Calculate average time in trade
+                // Calculate average time in trade with safe data handling
                 let totalTimeInTrade = 0;
                 let validTrades = 0;
-                closed.forEach(t => {
-                    if (t.entry_date && t.exit_date) {
-                        const entryTime = new Date(t.entry_date);
-                        const exitTime = new Date(t.exit_date);
-                        const timeDiff = exitTime - entryTime; // in milliseconds
-                        const minutesDiff = timeDiff / (1000 * 60); // convert to minutes
-                        totalTimeInTrade += minutesDiff;
-                        validTrades++;
-                    }
-                });
+                
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    closed.forEach(t => {
+                        try {
+                            // Validate trade and dates before calculation
+                            if (!t || !t.entry_date || !t.exit_date || 
+                                typeof t.entry_date !== 'string' || typeof t.exit_date !== 'string') {
+                                return;
+                            }
+                            
+                            const entryTime = new Date(t.entry_date);
+                            const exitTime = new Date(t.exit_date);
+                            
+                            // Validate dates
+                            if (isNaN(entryTime.getTime()) || isNaN(exitTime.getTime())) {
+                                return;
+                            }
+                            
+                            const timeDiff = exitTime - entryTime; // in milliseconds
+                            
+                            // Validate time difference
+                            if (isFinite(timeDiff) && timeDiff >= 0) {
+                                const minutesDiff = timeDiff / (1000 * 60); // convert to minutes
+                                if (isFinite(minutesDiff) && minutesDiff >= 0) {
+                                    totalTimeInTrade += minutesDiff;
+                                    validTrades++;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error calculating time in trade for trade:', e);
+                        }
+                    });
+                }
+                
                 const avgTimeInTrade = validTrades > 0 ? totalTimeInTrade / validTrades : 0;
 
-                document.getElementById('trade-execution-metrics').innerHTML = `
-                    ${createMetricRow('Total Trades', closed.length)}
-                    ${createMetricRow('Avg Capital Used', formatCurrency(avgCapital))}
-                    ${createMetricRow('Most Profitable Strategy', mostProfitableStrategy ? mostProfitableStrategy[0] : '—')}
-                    ${createMetricRow('Consecutive Wins', maxConsecutiveWins, 'text-green-500')}
-                    ${createMetricRow('Consecutive Losses', maxConsecutiveLosses, 'text-red-500')}
-                    ${createMetricRow('Avg. Time in Trade', avgTimeInTrade > 0 ? `${avgTimeInTrade.toFixed(1)} mins` : '—')}
-                `;
+                // Safe DOM element access with fallback
+                const tradeExecutionElement = document.getElementById('trade-execution-metrics');
+                if (tradeExecutionElement) {
+                    tradeExecutionElement.innerHTML = `
+                        ${createMetricRow('Total Trades', closed ? closed.length : 0)}
+                        ${createMetricRow('Avg Capital Used', formatCurrency(avgCapital))}
+                        ${createMetricRow('Most Profitable Strategy', mostProfitableStrategy ? mostProfitableStrategy[0] : '—')}
+                        ${createMetricRow('Consecutive Wins', maxConsecutiveWins, 'text-green-500')}
+                        ${createMetricRow('Consecutive Losses', maxConsecutiveLosses, 'text-red-500')}
+                        ${createMetricRow('Avg. Time in Trade', avgTimeInTrade > 0 ? `${avgTimeInTrade.toFixed(1)} mins` : '—')}
+                    `;
+                } else {
+                    console.warn('Trade Execution metrics container not found');
+                }
 
                 // 4. Time Metrics Card
-                const tradingDays = Object.keys(byDay).length;
+                const tradingDays = byDay && typeof byDay === 'object' ? Object.keys(byDay).length : 0;
                 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                 const byWeekday = {};
-                Object.entries(byDay).forEach(([date, pnl]) => {
-                    const dayName = weekdays[new Date(date).getDay()];
-                    byWeekday[dayName] = (byWeekday[dayName] || 0) + pnl;
-                });
-                const mostProfitableDay = Object.entries(byWeekday).sort((a, b) => b[1] - a[1])[0];
-                const leastProfitableDay = Object.entries(byWeekday).sort((a, b) => a[1] - b[1])[0];
+                
+                // Enhanced data validation and error handling
+                if (byDay && typeof byDay === 'object' && Object.keys(byDay).length > 0) {
+                    Object.entries(byDay).forEach(([date, pnl]) => {
+                        try {
+                            // Validate date and pnl
+                            if (!date || typeof date !== 'string' || typeof pnl !== 'number') {
+                                return;
+                            }
+                            
+                            const dateObj = new Date(date);
+                            if (isNaN(dateObj.getTime())) {
+                                return;
+                            }
+                            
+                            const dayName = weekdays[dateObj.getDay()];
+                            if (dayName && isFinite(pnl)) {
+                                byWeekday[dayName] = (byWeekday[dayName] || 0) + pnl;
+                            }
+                        } catch (e) {
+                            console.warn('Error processing date for time metrics:', date, e);
+                        }
+                    });
+                }
 
-                // Calculate consecutive win/loss days
-                let consecutiveWinDays = 0, consecutiveLossDays = 0, maxConsecutiveWinDays = 0, maxConsecutiveLossDays = 0;
+                // Safe array access with validation
+                const weekdayEntries = Object.entries(byWeekday);
+                const mostProfitableDay = weekdayEntries.length > 0 ? 
+                    [...weekdayEntries].sort((a, b) => b[1] - a[1])[0] : null;
+                const leastProfitableDay = weekdayEntries.length > 0 ? 
+                    [...weekdayEntries].sort((a, b) => a[1] - b[1])[0] : null;
+
+                // Calculate consecutive win/loss days with safe data handling
+                let maxConsecutiveWinDays = 0, maxConsecutiveLossDays = 0;
                 let currentWinDays = 0, currentLossDays = 0;
                 
-                Object.entries(byDay).sort((a, b) => new Date(a[0]) - new Date(b[0])).forEach(([_, pnl]) => {
-                    if (pnl > 0) {
-                        currentWinDays++;
-                        currentLossDays = 0;
-                        maxConsecutiveWinDays = Math.max(maxConsecutiveWinDays, currentWinDays);
-                    } else if (pnl < 0) {
-                        currentLossDays++;
-                        currentWinDays = 0;
-                        maxConsecutiveLossDays = Math.max(maxConsecutiveLossDays, currentLossDays);
+                if (byDay && typeof byDay === 'object' && Object.keys(byDay).length > 0) {
+                    try {
+                        const sortedEntries = Object.entries(byDay)
+                            .filter(([date, pnl]) => {
+                                // Validate date and pnl before sorting
+                                if (!date || typeof date !== 'string' || typeof pnl !== 'number') {
+                                    return false;
+                                }
+                                const dateObj = new Date(date);
+                                return !isNaN(dateObj.getTime()) && isFinite(pnl);
+                            })
+                            .sort((a, b) => {
+                                try {
+                                    const dateA = new Date(a[0]);
+                                    const dateB = new Date(b[0]);
+                                    return dateA - dateB;
+                                } catch (e) {
+                                    return 0;
+                                }
+                            });
+                        
+                        sortedEntries.forEach(([_, pnl]) => {
+                            if (isFinite(pnl)) {
+                                if (pnl > 0) {
+                                    currentWinDays++;
+                                    currentLossDays = 0;
+                                    maxConsecutiveWinDays = Math.max(maxConsecutiveWinDays, currentWinDays);
+                                } else if (pnl < 0) {
+                                    currentLossDays++;
+                                    currentWinDays = 0;
+                                    maxConsecutiveLossDays = Math.max(maxConsecutiveLossDays, currentLossDays);
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Error calculating consecutive days:', e);
                     }
-                });
+                }
 
-                document.getElementById('time-metrics').innerHTML = `
-                    ${createMetricRow('Trading Days', tradingDays)}
-                    ${createMetricRow('Consecutive Win Days', maxConsecutiveWinDays, 'text-green-500')}
-                    ${createMetricRow('Consecutive Loss Days', maxConsecutiveLossDays, 'text-red-500')}
-                    ${createMetricRow('Most Profitable Day', mostProfitableDay ? mostProfitableDay[0] : '—', 'text-green-500')}
-                    ${createMetricRow('Least Profitable Day', leastProfitableDay ? leastProfitableDay[0] : '—', 'text-red-500')}
-                `;
+                // Safe DOM element access with fallback
+                const timeMetricsElement = document.getElementById('time-metrics');
+                if (timeMetricsElement) {
+                    timeMetricsElement.innerHTML = `
+                        ${createMetricRow('Trading Days', tradingDays)}
+                        ${createMetricRow('Consecutive Win Days', maxConsecutiveWinDays, 'text-green-500')}
+                        ${createMetricRow('Consecutive Loss Days', maxConsecutiveLossDays, 'text-red-500')}
+                        ${createMetricRow('Most Profitable Day', mostProfitableDay ? mostProfitableDay[0] : '—', 'text-green-500')}
+                        ${createMetricRow('Least Profitable Day', leastProfitableDay ? leastProfitableDay[0] : '—', 'text-red-500')}
+                    `;
+                } else {
+                    console.warn('Time Metrics container not found');
+                }
 
                 // 5. Setup Effectiveness Card - Top 5 Strategies by Win Rate
                 const strategyStats = {};
