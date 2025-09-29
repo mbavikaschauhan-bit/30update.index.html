@@ -5444,6 +5444,9 @@
                         <span class="text-sm font-semibold ${color}">${value}</span>
                     </div>`;
 
+                // Define weekdaysOrder for use across all weekday-related metrics
+                const weekdaysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
                 // 1. Trade Performance Card
                 const breakEven = closed.filter(t => ((t.exit_price - t.entry_price) * (t.quantity || 0)) === 0).length;
                 const avgWin = wins.length ? wins.reduce((s, t) => s + ((t.exit_price - t.entry_price) * (t.quantity || 0)), 0) / wins.length : 0;
@@ -5694,16 +5697,18 @@
                 `;
 
                 // 7. Capital Usage Card - Flawless Implementation
-                if (closed.length === 0) {
-                    // Handle empty trades case
-                    document.getElementById('capital-usage-metrics').innerHTML = `
-                        ${createMetricRow('Maximum', '—')}
-                        ${createMetricRow('Minimum', '—')}
-                        ${createMetricRow('Average', '—')}
-                        ${createMetricRow('P&L at Max Capital', '—')}
-                        ${createMetricRow('P&L at Min Capital', '—')}
-                    `;
-                } else {
+                const capitalUsageElement = document.getElementById('capital-usage-metrics');
+                if (capitalUsageElement) {
+                    if (closed.length === 0) {
+                        // Handle empty trades case
+                        capitalUsageElement.innerHTML = `
+                            ${createMetricRow('Maximum', '—')}
+                            ${createMetricRow('Minimum', '—')}
+                            ${createMetricRow('Average', '—')}
+                            ${createMetricRow('P&L at Max Capital', '—')}
+                            ${createMetricRow('P&L at Min Capital', '—')}
+                        `;
+                    } else {
                     // Filter valid trades with proper data validation
                     const validTrades = closed.filter(t => 
                         t.entry_price && 
@@ -5714,16 +5719,16 @@
                         t.quantity > 0
                     );
                     
-                    if (validTrades.length === 0) {
-                        // Handle case where no trades have valid data
-                        document.getElementById('capital-usage-metrics').innerHTML = `
-                            ${createMetricRow('Maximum', '—')}
-                            ${createMetricRow('Minimum', '—')}
-                            ${createMetricRow('Average', '—')}
-                            ${createMetricRow('P&L at Max Capital', '—')}
-                            ${createMetricRow('P&L at Min Capital', '—')}
-                        `;
-                    } else {
+                        if (validTrades.length === 0) {
+                            // Handle case where no trades have valid data
+                            capitalUsageElement.innerHTML = `
+                                ${createMetricRow('Maximum', '—')}
+                                ${createMetricRow('Minimum', '—')}
+                                ${createMetricRow('Average', '—')}
+                                ${createMetricRow('P&L at Max Capital', '—')}
+                                ${createMetricRow('P&L at Min Capital', '—')}
+                            `;
+                        } else {
                         // Calculate capital usage with validated data
                         const capitalUsed = validTrades.map(t => t.entry_price * t.quantity);
                         const maxCapital = Math.max(...capitalUsed);
@@ -5752,37 +5757,25 @@
                         const pnlAtMaxCapital = calculateNetPnl(maxCapitalTrade);
                         const pnlAtMinCapital = calculateNetPnl(minCapitalTrade);
 
-                        document.getElementById('capital-usage-metrics').innerHTML = `
-                            ${createMetricRow('Maximum', formatCurrency(maxCapital))}
-                            ${createMetricRow('Minimum', formatCurrency(minCapital))}
-                            ${createMetricRow('Average', formatCurrency(avgCapitalUsed))}
-                            ${createMetricRow('P&L at Max Capital', formatCurrency(pnlAtMaxCapital), pnlAtMaxCapital >= 0 ? 'text-green-500' : 'text-red-500')}
-                            ${createMetricRow('P&L at Min Capital', formatCurrency(pnlAtMinCapital), pnlAtMinCapital >= 0 ? 'text-green-500' : 'text-red-500')}
-                        `;
+                            capitalUsageElement.innerHTML = `
+                                ${createMetricRow('Maximum', formatCurrency(maxCapital))}
+                                ${createMetricRow('Minimum', formatCurrency(minCapital))}
+                                ${createMetricRow('Average', formatCurrency(avgCapitalUsed))}
+                                ${createMetricRow('P&L at Max Capital', formatCurrency(pnlAtMaxCapital), pnlAtMaxCapital >= 0 ? 'text-green-500' : 'text-red-500')}
+                                ${createMetricRow('P&L at Min Capital', formatCurrency(pnlAtMinCapital), pnlAtMinCapital >= 0 ? 'text-green-500' : 'text-red-500')}
+                            `;
+                        }
                     }
+                } else {
+                    console.warn('Capital Usage metrics container not found');
                 }
 
                 // 8. Quantity Analysis Card - Flawless Implementation
-                if (closed.length === 0) {
-                    // Handle empty trades case
-                    document.getElementById('quantity-analysis-metrics').innerHTML = `
-                        ${createMetricRow('Maximum', '—')}
-                        ${createMetricRow('Minimum', '—')}
-                        ${createMetricRow('Average', '—')}
-                        ${createMetricRow('P&L at Max Qty', '—')}
-                        ${createMetricRow('P&L at Min Qty', '—')}
-                    `;
-                } else {
-                    // Filter valid trades with proper data validation
-                    const validTrades = closed.filter(t => 
-                        t.quantity && 
-                        !isNaN(t.quantity) && 
-                        t.quantity > 0
-                    );
-                    
-                    if (validTrades.length === 0) {
-                        // Handle case where no trades have valid quantity data
-                        document.getElementById('quantity-analysis-metrics').innerHTML = `
+                const quantityAnalysisElement = document.getElementById('quantity-analysis-metrics');
+                if (quantityAnalysisElement) {
+                    if (closed.length === 0) {
+                        // Handle empty trades case
+                        quantityAnalysisElement.innerHTML = `
                             ${createMetricRow('Maximum', '—')}
                             ${createMetricRow('Minimum', '—')}
                             ${createMetricRow('Average', '—')}
@@ -5790,6 +5783,23 @@
                             ${createMetricRow('P&L at Min Qty', '—')}
                         `;
                     } else {
+                    // Filter valid trades with proper data validation
+                    const validTrades = closed.filter(t => 
+                        t.quantity && 
+                        !isNaN(t.quantity) && 
+                        t.quantity > 0
+                    );
+                    
+                        if (validTrades.length === 0) {
+                            // Handle case where no trades have valid quantity data
+                            quantityAnalysisElement.innerHTML = `
+                                ${createMetricRow('Maximum', '—')}
+                                ${createMetricRow('Minimum', '—')}
+                                ${createMetricRow('Average', '—')}
+                                ${createMetricRow('P&L at Max Qty', '—')}
+                                ${createMetricRow('P&L at Min Qty', '—')}
+                            `;
+                        } else {
                         // Calculate quantity analysis with validated data
                         const quantities = validTrades.map(t => t.quantity);
                         const maxQty = Math.max(...quantities);
@@ -5818,53 +5828,168 @@
                         const pnlAtMaxQty = calculateNetPnl(maxQtyTrade);
                         const pnlAtMinQty = calculateNetPnl(minQtyTrade);
 
-                        document.getElementById('quantity-analysis-metrics').innerHTML = `
-                            ${createMetricRow('Maximum', maxQty.toLocaleString())}
-                            ${createMetricRow('Minimum', minQty.toLocaleString())}
-                            ${createMetricRow('Average', Math.round(avgQty).toLocaleString())}
-                            ${createMetricRow('P&L at Max Qty', formatCurrency(pnlAtMaxQty), pnlAtMaxQty >= 0 ? 'text-green-500' : 'text-red-500')}
-                            ${createMetricRow('P&L at Min Qty', formatCurrency(pnlAtMinQty), pnlAtMinQty >= 0 ? 'text-green-500' : 'text-red-500')}
-                        `;
+                            quantityAnalysisElement.innerHTML = `
+                                ${createMetricRow('Maximum', maxQty.toLocaleString())}
+                                ${createMetricRow('Minimum', minQty.toLocaleString())}
+                                ${createMetricRow('Average', Math.round(avgQty).toLocaleString())}
+                                ${createMetricRow('P&L at Max Qty', formatCurrency(pnlAtMaxQty), pnlAtMaxQty >= 0 ? 'text-green-500' : 'text-red-500')}
+                                ${createMetricRow('P&L at Min Qty', formatCurrency(pnlAtMinQty), pnlAtMinQty >= 0 ? 'text-green-500' : 'text-red-500')}
+                            `;
+                        }
                     }
+                } else {
+                    console.warn('Quantity Analysis metrics container not found');
                 }
 
                 // 9. Weekday Avg R:R Card
                 const weekdayRR = {};
-                Object.entries(byWeekday).forEach(([day, pnl]) => {
-                    const dayTrades = closed.filter(t => weekdays[new Date(t.exit_date).getDay()] === day);
-                    if (dayTrades.length > 0) {
-                        // Calculate individual R:R ratios for each trade and then average them
-                        const individualRRs = dayTrades.map(trade => {
-                            const tradePnL = (trade.exit_price - trade.entry_price) * (trade.quantity || 0);
-                            const risk = Math.abs(tradePnL); // Risk is the absolute value of the trade
-                            const reward = Math.max(0, tradePnL); // Reward is only positive PnL
-                            return risk > 0 ? reward / risk : 0;
-                        });
-                        
-                        // Calculate average R:R for the day
-                        const avgRR = individualRRs.reduce((sum, rr) => sum + rr, 0) / individualRRs.length;
-                        weekdayRR[day] = avgRR;
-                    }
-                });
+                
+                // Enhanced data validation and error handling
+                if (byWeekday && typeof byWeekday === 'object' && closed && Array.isArray(closed)) {
+                    Object.entries(byWeekday).forEach(([day, pnl]) => {
+                        try {
+                            // Safely filter trades for this weekday with comprehensive validation
+                            const dayTrades = closed.filter(t => {
+                                // Validate trade object and exit_date
+                                if (!t || !t.exit_date || typeof t.exit_date !== 'string') {
+                                    return false;
+                                }
+                                
+                                try {
+                                    const exitDate = new Date(t.exit_date);
+                                    if (isNaN(exitDate.getTime())) {
+                                        return false;
+                                    }
+                                    
+                                    const dayOfWeek = weekdays[exitDate.getDay()];
+                                    return dayOfWeek === day;
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            
+                            if (dayTrades.length > 0) {
+                                // Safely calculate individual R:R ratios with comprehensive validation
+                                const individualRRs = dayTrades.map(trade => {
+                                    try {
+                                        // Validate trade data before calculation
+                                        if (!trade || 
+                                            typeof trade.exit_price !== 'number' || 
+                                            typeof trade.entry_price !== 'number' || 
+                                            !trade.quantity || 
+                                            typeof trade.quantity !== 'number') {
+                                            return 0; // Return 0 for invalid trades
+                                        }
+                                        
+                                        const tradePnL = (trade.exit_price - trade.entry_price) * trade.quantity;
+                                        
+                                        // Validate PnL calculation result
+                                        if (!isFinite(tradePnL)) {
+                                            return 0;
+                                        }
+                                        
+                                        const risk = Math.abs(tradePnL);
+                                        const reward = Math.max(0, tradePnL);
+                                        
+                                        // Safe R:R calculation with division by zero protection
+                                        if (risk > 0 && isFinite(reward) && isFinite(risk)) {
+                                            const rr = reward / risk;
+                                            return isFinite(rr) ? rr : 0;
+                                        }
+                                        return 0;
+                                    } catch (e) {
+                                        return 0; // Return 0 for any calculation errors
+                                    }
+                                }).filter(rr => isFinite(rr) && rr >= 0); // Filter out invalid R:R ratios
+                                
+                                // Safe average calculation with validation
+                                if (individualRRs.length > 0) {
+                                    const avgRR = individualRRs.reduce((sum, rr) => sum + rr, 0) / individualRRs.length;
+                                    weekdayRR[day] = isFinite(avgRR) ? avgRR : 0;
+                                } else {
+                                    weekdayRR[day] = 0;
+                                }
+                            } else {
+                                weekdayRR[day] = 0;
+                            }
+                        } catch (e) {
+                            console.warn('Error processing weekday R:R for', day, ':', e);
+                            weekdayRR[day] = 0;
+                        }
+                    });
+                }
 
-                const weekdaysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-                document.getElementById('weekday-rr-metrics').innerHTML = weekdaysOrder
-                    .filter(day => weekdayRR[day] !== undefined)
-                    .map(day => createMetricRow(day, `${weekdayRR[day].toFixed(2)}R`, weekdayRR[day] >= 1 ? 'text-green-500' : 'text-white'))
-                    .join('') || '<div class="text-sm" style="color: var(--text-muted);">No R:R data available</div>';
+                // Safe DOM element access with fallback
+                const weekdayRRElement = document.getElementById('weekday-rr-metrics');
+                if (weekdayRRElement) {
+                    weekdayRRElement.innerHTML = weekdaysOrder
+                        .filter(day => weekdayRR[day] !== undefined)
+                        .map(day => createMetricRow(day, `${weekdayRR[day].toFixed(2)}R`, weekdayRR[day] >= 1 ? 'text-green-500' : 'text-white'))
+                        .join('') || '<div class="text-sm" style="color: var(--text-muted);">No R:R data available</div>';
+                } else {
+                    console.warn('Weekday R:R metrics container not found');
+                }
 
                 // 10. Weekday Win Rate Card
                 const weekdayWinRates = {};
-                Object.entries(byWeekday).forEach(([day, pnl]) => {
-                    const dayTrades = closed.filter(t => weekdays[new Date(t.exit_date).getDay()] === day);
-                    const dayWins = dayTrades.filter(t => ((t.exit_price - t.entry_price) * (t.quantity || 0)) > 0).length;
-                    weekdayWinRates[day] = dayTrades.length > 0 ? (dayWins / dayTrades.length) * 100 : 0;
-                });
+                
+                // Enhanced data validation and error handling
+                if (byWeekday && typeof byWeekday === 'object' && closed && Array.isArray(closed)) {
+                    Object.entries(byWeekday).forEach(([day, pnl]) => {
+                        try {
+                            // Safely filter trades for this weekday with comprehensive validation
+                            const dayTrades = closed.filter(t => {
+                                // Validate trade object and exit_date
+                                if (!t || !t.exit_date || typeof t.exit_date !== 'string') {
+                                    return false;
+                                }
+                                
+                                try {
+                                    const exitDate = new Date(t.exit_date);
+                                    if (isNaN(exitDate.getTime())) {
+                                        return false;
+                                    }
+                                    
+                                    const dayOfWeek = weekdays[exitDate.getDay()];
+                                    return dayOfWeek === day;
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            
+                            // Safely calculate wins with data validation
+                            const dayWins = dayTrades.filter(t => {
+                                try {
+                                    // Validate trade data before calculation
+                                    if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || !t.quantity) {
+                                        return false;
+                                    }
+                                    const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                    return pnl > 0;
+                                } catch (e) {
+                                    return false;
+                                }
+                            }).length;
+                            
+                            // Safe calculation with division by zero protection
+                            weekdayWinRates[day] = dayTrades.length > 0 ? (dayWins / dayTrades.length) * 100 : 0;
+                        } catch (e) {
+                            console.warn('Error processing weekday win rate for', day, ':', e);
+                            weekdayWinRates[day] = 0;
+                        }
+                    });
+                }
 
-                document.getElementById('weekday-win-rate-metrics').innerHTML = weekdaysOrder
-                    .filter(day => weekdayWinRates[day] !== undefined)
-                    .map(day => createMetricRow(day, `${weekdayWinRates[day].toFixed(0)}%`, weekdayWinRates[day] >= 50 ? 'text-green-500' : 'text-white'))
-                    .join('') || '<div class="text-sm" style="color: var(--text-muted);">No win rate data available</div>';
+                // Safe DOM element access with fallback
+                const weekdayWinRateElement = document.getElementById('weekday-win-rate-metrics');
+                if (weekdayWinRateElement) {
+                    weekdayWinRateElement.innerHTML = weekdaysOrder
+                        .filter(day => weekdayWinRates[day] !== undefined)
+                        .map(day => createMetricRow(day, `${weekdayWinRates[day].toFixed(0)}%`, weekdayWinRates[day] >= 50 ? 'text-green-500' : 'text-white'))
+                        .join('') || '<div class="text-sm" style="color: var(--text-muted);">No win rate data available</div>';
+                } else {
+                    console.warn('Weekday Win Rate metrics container not found');
+                }
 
                 // 11. Daily Trade Activity Card
                 const tradesPerDay = {};
