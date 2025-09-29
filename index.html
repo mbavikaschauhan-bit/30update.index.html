@@ -5448,39 +5448,145 @@
                 const weekdaysOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
                 // 1. Trade Performance Card
-                const breakEven = closed.filter(t => ((t.exit_price - t.entry_price) * (t.quantity || 0)) === 0).length;
-                const avgWin = wins.length ? wins.reduce((s, t) => s + ((t.exit_price - t.entry_price) * (t.quantity || 0)), 0) / wins.length : 0;
-                const avgLoss = losses.length ? Math.abs(losses.reduce((s, t) => s + ((t.exit_price - t.entry_price) * (t.quantity || 0)), 0)) / losses.length : 0;
-                const expectancy = closed.length ? (wins.length * avgWin - losses.length * avgLoss) / closed.length : 0;
+                // Enhanced data validation and error handling
+                let breakEven = 0, avgWin = 0, avgLoss = 0, expectancy = 0;
+                let winRate = 0;
                 
-                document.getElementById('trade-performance-metrics').innerHTML = `
-                    <div class="text-left mb-2">
-                        <div class="text-2xl font-bold mb-1">
-                            <span class="text-green-500">${wins.length}</span> / 
-                            <span class="text-red-500">${losses.length}</span> / 
-                            <span style="color: var(--text-primary);">${breakEven}</span>
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    try {
+                        // Safely calculate break-even trades with data validation
+                        breakEven = closed.filter(t => {
+                            try {
+                                // Validate trade data before calculation
+                                if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return false;
+                                }
+                                
+                                const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                return isFinite(pnl) && pnl === 0;
+                            } catch (e) {
+                                return false;
+                            }
+                        }).length;
+                        
+                        // Safely calculate average win with data validation
+                        if (wins && Array.isArray(wins) && wins.length > 0) {
+                            const validWins = wins.filter(t => {
+                                try {
+                                    if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                        return false;
+                                    }
+                                    const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                    return isFinite(pnl) && pnl > 0;
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            
+                            if (validWins.length > 0) {
+                                const winSum = validWins.reduce((s, t) => {
+                                    try {
+                                        const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                        return isFinite(pnl) ? s + pnl : s;
+                                    } catch (e) {
+                                        return s;
+                                    }
+                                }, 0);
+                                
+                                avgWin = isFinite(winSum) ? winSum / validWins.length : 0;
+                            }
+                        }
+                        
+                        // Safely calculate average loss with data validation
+                        if (losses && Array.isArray(losses) && losses.length > 0) {
+                            const validLosses = losses.filter(t => {
+                                try {
+                                    if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                        return false;
+                                    }
+                                    const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                    return isFinite(pnl) && pnl < 0;
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            
+                            if (validLosses.length > 0) {
+                                const lossSum = Math.abs(validLosses.reduce((s, t) => {
+                                    try {
+                                        const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                        return isFinite(pnl) ? s + pnl : s;
+                                    } catch (e) {
+                                        return s;
+                                    }
+                                }, 0));
+                                
+                                avgLoss = isFinite(lossSum) ? lossSum / validLosses.length : 0;
+                            }
+                        }
+                        
+                        // Safely calculate expectancy with division by zero protection
+                        if (closed.length > 0) {
+                            const winsCount = wins && Array.isArray(wins) ? wins.length : 0;
+                            const lossesCount = losses && Array.isArray(losses) ? losses.length : 0;
+                            
+                            if (isFinite(avgWin) && isFinite(avgLoss)) {
+                                expectancy = (winsCount * avgWin - lossesCount * avgLoss) / closed.length;
+                                expectancy = isFinite(expectancy) ? expectancy : 0;
+                            }
+                        }
+                        
+                        // Safely calculate win rate with division by zero protection
+                        if (closed.length > 0) {
+                            const winsCount = wins && Array.isArray(wins) ? wins.length : 0;
+                            winRate = (winsCount / closed.length) * 100;
+                            winRate = isFinite(winRate) ? winRate : 0;
+                        }
+                        
+                    } catch (e) {
+                        console.warn('Error calculating trade performance metrics:', e);
+                        // Reset to safe defaults
+                        breakEven = 0; avgWin = 0; avgLoss = 0; expectancy = 0; winRate = 0;
+                    }
+                }
+
+                // Safe DOM element access with fallback
+                const tradePerformanceElement = document.getElementById('trade-performance-metrics');
+                if (tradePerformanceElement) {
+                    const winsCount = wins && Array.isArray(wins) ? wins.length : 0;
+                    const lossesCount = losses && Array.isArray(losses) ? losses.length : 0;
+                    
+                    tradePerformanceElement.innerHTML = `
+                        <div class="text-left mb-2">
+                            <div class="text-2xl font-bold mb-1">
+                                <span class="text-green-500">${winsCount}</span> / 
+                                <span class="text-red-500">${lossesCount}</span> / 
+                                <span style="color: var(--text-primary);">${breakEven}</span>
+                            </div>
+                            <div class="text-sm" style="color: var(--text-muted);">Win / Loss / Break Even</div>
                         </div>
-                        <div class="text-sm" style="color: var(--text-muted);">Win / Loss / Break Even</div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-1.5">
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Win</div>
-                            <div class="text-sm font-semibold text-green-500">${formatCurrency(avgWin)}</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Win</div>
+                                <div class="text-sm font-semibold text-green-500">${formatCurrency(avgWin)}</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Loss</div>
+                                <div class="text-sm font-semibold text-red-500">${formatCurrency(-avgLoss)}</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Win Rate</div>
+                                <div class="text-sm font-semibold" style="color: var(--text-primary);">${winRate.toFixed(1)}%</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Expectancy</div>
+                                <div class="text-sm font-semibold" style="color: var(--text-primary);">${formatCurrency(expectancy)}</div>
+                            </div>
                         </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Loss</div>
-                            <div class="text-sm font-semibold text-red-500">${formatCurrency(-avgLoss)}</div>
-                        </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Win Rate</div>
-                            <div class="text-sm font-semibold" style="color: var(--text-primary);">${((wins.length / closed.length) * 100).toFixed(1)}%</div>
-                        </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Expectancy</div>
-                            <div class="text-sm font-semibold" style="color: var(--text-primary);">${formatCurrency(expectancy)}</div>
-                        </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    console.warn('Trade Performance metrics container not found');
+                }
 
                 // 2. Daily Performance Card
                 // Enhanced data validation and error handling
