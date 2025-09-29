@@ -5603,62 +5603,122 @@
 
                 // 5. Setup Effectiveness Card - Top 5 Strategies by Win Rate
                 const strategyStats = {};
-                closed.forEach(t => {
-                    const strategy = t.strategy || 'Other';
-                    if (!strategyStats[strategy]) {
-                        strategyStats[strategy] = { total: 0, wins: 0, totalPnl: 0 };
-                    }
-                    strategyStats[strategy].total++;
-                    
-                    // Calculate P&L for this trade (considering partial exits)
-                    let pnl = 0;
-                    const isPartialExit = t.exit_quantity && t.exit_quantity > 0 && t.exit_quantity < t.quantity;
-                    
-                    if (isPartialExit) {
-                        // For partial trades, use the calculated net P&L
-                        pnl = calculateNetPnl(t);
-                    } else {
-                        // For full trades, calculate normally
-                        const grossPnl = (t.exit_price - t.entry_price) * (t.quantity || 0);
-                        const charges = (t.brokerage || 0) + (t.other_fees || 0);
-                        pnl = grossPnl - charges;
-                    }
-                    
-                    strategyStats[strategy].totalPnl += pnl;
-                    if (pnl > 0) strategyStats[strategy].wins++;
-                });
+                
+                // Enhanced data validation and error handling
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    closed.forEach(t => {
+                        try {
+                            // Validate trade object
+                            if (!t || typeof t !== 'object') {
+                                return;
+                            }
+                            
+                            const strategy = t.strategy || 'Other';
+                            if (!strategyStats[strategy]) {
+                                strategyStats[strategy] = { total: 0, wins: 0, totalPnl: 0 };
+                            }
+                            strategyStats[strategy].total++;
+                            
+                            // Safely calculate P&L with comprehensive validation
+                            let pnl = 0;
+                            const isPartialExit = t.exit_quantity && t.exit_quantity > 0 && t.exit_quantity < t.quantity;
+                            
+                            if (isPartialExit) {
+                                // For partial trades, safely use the calculated net P&L
+                                try {
+                                    if (typeof calculateNetPnl === 'function') {
+                                        const calculatedPnl = calculateNetPnl(t);
+                                        pnl = isFinite(calculatedPnl) ? calculatedPnl : 0;
+                                    } else {
+                                        // Fallback calculation if function doesn't exist
+                                        pnl = 0;
+                                    }
+                                } catch (e) {
+                                    pnl = 0;
+                                }
+                            } else {
+                                // For full trades, calculate with validation
+                                if (typeof t.exit_price === 'number' && 
+                                    typeof t.entry_price === 'number' && 
+                                    typeof t.quantity === 'number' && 
+                                    t.quantity > 0) {
+                                    
+                                    const grossPnl = (t.exit_price - t.entry_price) * t.quantity;
+                                    const charges = (t.brokerage || 0) + (t.other_fees || 0);
+                                    
+                                    // Validate calculations
+                                    if (isFinite(grossPnl) && isFinite(charges)) {
+                                        pnl = grossPnl - charges;
+                                        pnl = isFinite(pnl) ? pnl : 0;
+                                    } else {
+                                        pnl = 0;
+                                    }
+                                } else {
+                                    pnl = 0;
+                                }
+                            }
+                            
+                            // Safe PnL accumulation
+                            if (isFinite(pnl)) {
+                                strategyStats[strategy].totalPnl += pnl;
+                                if (pnl > 0) strategyStats[strategy].wins++;
+                            }
+                        } catch (e) {
+                            console.warn('Error processing trade for setup effectiveness:', e);
+                        }
+                    });
+                }
 
-                // Calculate win rates and sort by win rate (descending)
+                // Safe calculation of strategy effectiveness with division by zero protection
                 const strategyEffectiveness = Object.keys(strategyStats).map(strategy => {
-                    const stats = strategyStats[strategy];
-                    const winRate = stats.total > 0 ? (stats.wins / stats.total) * 100 : 0;
-                    return {
-                        strategy: strategy,
-                        winRate: winRate,
-                        total: stats.total,
-                        wins: stats.wins,
-                        totalPnl: stats.totalPnl
-                    };
+                    try {
+                        const stats = strategyStats[strategy];
+                        const winRate = stats.total > 0 ? (stats.wins / stats.total) * 100 : 0;
+                        
+                        return {
+                            strategy: strategy,
+                            winRate: isFinite(winRate) ? winRate : 0,
+                            total: stats.total,
+                            wins: stats.wins,
+                            totalPnl: isFinite(stats.totalPnl) ? stats.totalPnl : 0
+                        };
+                    } catch (e) {
+                        return {
+                            strategy: strategy,
+                            winRate: 0,
+                            total: 0,
+                            wins: 0,
+                            totalPnl: 0
+                        };
+                    }
                 }).sort((a, b) => b.winRate - a.winRate).slice(0, 5); // Top 5 strategies
 
-                document.getElementById('setup-effectiveness-metrics').innerHTML = strategyEffectiveness.length > 0 
-                    ? strategyEffectiveness
-                        .map(({ strategy, winRate, total, wins, totalPnl }) => {
-                            const pnlColor = totalPnl >= 0 ? 'text-green-500' : 'text-red-500';
-                            const winRateColor = winRate >= 50 ? 'text-green-500' : 'text-red-500';
-                            return `
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <div class="text-sm font-medium" style="color: var(--text-primary);">${strategy}</div>
+                // Safe DOM element access with fallback
+                const setupEffectivenessElement = document.getElementById('setup-effectiveness-metrics');
+                if (setupEffectivenessElement) {
+                    setupEffectivenessElement.innerHTML = strategyEffectiveness.length > 0 
+                        ? strategyEffectiveness
+                            .map(({ strategy, winRate, total, wins, totalPnl }) => {
+                                const pnlColor = totalPnl >= 0 ? 'text-green-500' : 'text-red-500';
+                                const winRateColor = winRate >= 50 ? 'text-green-500' : 'text-red-500';
+                                return `
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <div class="text-sm font-medium" style="color: var(--text-primary);">${strategy}</div>
+                                            <div class="text-xs" style="color: var(--text-secondary);">${wins}/${total} trades</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="text-sm font-semibold ${winRateColor}">${winRate.toFixed(1)}%</div>
+                                            <div class="text-xs ${pnlColor}">${formatCurrency(totalPnl)}</div>
+                                        </div>
                                     </div>
-                                    <div class="text-right">
-                                        <div class="text-sm font-semibold ${winRateColor}">${winRate.toFixed(1)}%</div>
-                                    </div>
-                                </div>
-                            `;
-                        })
-                        .join('')
-                    : '<div class="text-sm text-center py-4" style="color: var(--text-muted);">No strategy data available</div>';
+                                `;
+                            })
+                            .join('')
+                        : '<div class="text-sm text-center py-4" style="color: var(--text-muted);">No strategy data available</div>';
+                } else {
+                    console.warn('Setup Effectiveness metrics container not found');
+                }
 
                 // 6. Symbol Frequency Card
                 const symbolStats = {};
