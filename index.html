@@ -1867,7 +1867,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Row 4: Weekday Win Rate, Daily Trade Activity -->
+                                <!-- Row 4: Weekday Win Rate, Daily Trade Activity, Emotional State -->
                                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                     <!-- Weekday Win Rate Card -->
                                     <div class="p-6 rounded-lg shadow-sm" style="background-color: var(--bg-primary); border: 1px solid var(--border-color);">
@@ -1891,6 +1891,19 @@
                                             </div>
                                         </div>
                                         <div id="daily-trade-activity-metrics" class="space-y-3">
+                                            <!-- Dynamic content -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Emotional State Card -->
+                                    <div class="p-6 rounded-lg shadow-sm" style="background-color: var(--bg-primary); border: 1px solid var(--border-color);">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <h3 class="font-semibold" style="color: var(--text-primary);">Emotional State</h3>
+                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background-color: #ec4899;">
+                                                <i data-feather="heart" class="w-4 h-4 text-white"></i>
+                                            </div>
+                                        </div>
+                                        <div id="emotional-state-metrics" class="space-y-3">
                                             <!-- Dynamic content -->
                                         </div>
                                     </div>
@@ -6743,6 +6756,78 @@
                     `;
                 } else {
                     console.warn('Daily Trade Activity metrics container not found');
+                }
+
+                // 12. Emotional State Card
+                const emotionalStateStats = {};
+                
+                // Enhanced data validation and error handling
+                if (closed && Array.isArray(closed)) {
+                    closed.forEach(t => {
+                        try {
+                            // Validate trade object and emotionalState property
+                            if (t && t.emotionalState && typeof t.emotionalState === 'string') {
+                                const state = t.emotionalState.trim();
+                                if (state && state.length > 0) {
+                                    emotionalStateStats[state] = (emotionalStateStats[state] || 0) + 1;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error processing emotional state for trade:', e);
+                        }
+                    });
+                }
+                
+                // Calculate total trades with emotional state data
+                const totalTradesWithEmotionalState = Object.values(emotionalStateStats).reduce((sum, count) => {
+                    try {
+                        return isFinite(count) ? sum + count : sum;
+                    } catch (e) {
+                        return sum;
+                    }
+                }, 0);
+                
+                // Get top 5 emotional states with safe sorting
+                const topEmotionalStates = Object.entries(emotionalStateStats)
+                    .filter(([state, count]) => {
+                        try {
+                            return state && typeof state === 'string' && isFinite(count) && count > 0;
+                        } catch (e) {
+                            return false;
+                        }
+                    })
+                    .sort(([,a], [,b]) => {
+                        try {
+                            return isFinite(a) && isFinite(b) ? b - a : 0;
+                        } catch (e) {
+                            return 0;
+                        }
+                    })
+                    .slice(0, 5);
+                
+                // Safe DOM element access with fallback
+                const emotionalStateElement = document.getElementById('emotional-state-metrics');
+                if (emotionalStateElement) {
+                    if (topEmotionalStates.length === 0) {
+                        emotionalStateElement.innerHTML = `
+                            <div class="text-center text-sm" style="color: var(--text-secondary);">
+                                No emotional state data available
+                            </div>
+                        `;
+                    } else {
+                        emotionalStateElement.innerHTML = topEmotionalStates.map(([state, count]) => {
+                            try {
+                                const percentage = totalTradesWithEmotionalState > 0 ? 
+                                    ((count / totalTradesWithEmotionalState) * 100).toFixed(0) : 0;
+                                return createMetricRow(state, `${percentage}%`);
+                            } catch (e) {
+                                console.warn('Error calculating percentage for emotional state:', state, e);
+                                return createMetricRow(state, '0%');
+                            }
+                        }).join('');
+                    }
+                } else {
+                    console.warn('Emotional State metrics container not found');
                 }
 
             } catch (e) {
