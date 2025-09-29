@@ -5483,42 +5483,95 @@
                 `;
 
                 // 2. Daily Performance Card
-                const winDays = Object.entries(byDay).filter(([_, pnl]) => pnl > 0).length;
-                const lossDays = Object.entries(byDay).filter(([_, pnl]) => pnl < 0).length;
-                const breakEvenDays = Object.entries(byDay).filter(([_, pnl]) => pnl === 0).length;
-                const bestDayPnl = Math.max(...Object.values(byDay), 0);
-                const worstDayPnl = Math.min(...Object.values(byDay), 0);
-                const avgWinDay = winDays ? Object.values(byDay).filter(pnl => pnl > 0).reduce((a, b) => a + b, 0) / winDays : 0;
-                const avgLossDay = lossDays ? Math.abs(Object.values(byDay).filter(pnl => pnl < 0).reduce((a, b) => a + b, 0)) / lossDays : 0;
+                // Enhanced data validation and error handling
+                let winDays = 0, lossDays = 0, breakEvenDays = 0;
+                let bestDayPnl = 0, worstDayPnl = 0;
+                let avgWinDay = 0, avgLossDay = 0;
+                
+                if (byDay && typeof byDay === 'object' && Object.keys(byDay).length > 0) {
+                    try {
+                        // Safely filter days with data validation
+                        const dayEntries = Object.entries(byDay).filter(([_, pnl]) => {
+                            return typeof pnl === 'number' && isFinite(pnl);
+                        });
+                        
+                        if (dayEntries.length > 0) {
+                            // Safely calculate day counts
+                            winDays = dayEntries.filter(([_, pnl]) => pnl > 0).length;
+                            lossDays = dayEntries.filter(([_, pnl]) => pnl < 0).length;
+                            breakEvenDays = dayEntries.filter(([_, pnl]) => pnl === 0).length;
+                            
+                            // Safely calculate best/worst day PnL with validation
+                            const pnlValues = dayEntries.map(([_, pnl]) => pnl);
+                            if (pnlValues.length > 0) {
+                                bestDayPnl = Math.max(...pnlValues);
+                                worstDayPnl = Math.min(...pnlValues);
+                                
+                                // Validate results
+                                bestDayPnl = isFinite(bestDayPnl) ? bestDayPnl : 0;
+                                worstDayPnl = isFinite(worstDayPnl) ? worstDayPnl : 0;
+                            }
+                            
+                            // Safely calculate average win/loss days with division by zero protection
+                            if (winDays > 0) {
+                                const winPnls = pnlValues.filter(pnl => pnl > 0);
+                                if (winPnls.length > 0) {
+                                    const winSum = winPnls.reduce((a, b) => isFinite(a) && isFinite(b) ? a + b : a, 0);
+                                    avgWinDay = isFinite(winSum) ? winSum / winDays : 0;
+                                }
+                            }
+                            
+                            if (lossDays > 0) {
+                                const lossPnls = pnlValues.filter(pnl => pnl < 0);
+                                if (lossPnls.length > 0) {
+                                    const lossSum = Math.abs(lossPnls.reduce((a, b) => isFinite(a) && isFinite(b) ? a + b : a, 0));
+                                    avgLossDay = isFinite(lossSum) ? lossSum / lossDays : 0;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error calculating daily performance metrics:', e);
+                        // Reset to safe defaults
+                        winDays = 0; lossDays = 0; breakEvenDays = 0;
+                        bestDayPnl = 0; worstDayPnl = 0;
+                        avgWinDay = 0; avgLossDay = 0;
+                    }
+                }
 
-                document.getElementById('daily-performance-metrics').innerHTML = `
-                    <div class="text-left mb-2">
-                        <div class="text-2xl font-bold mb-1">
-                            <span class="text-green-500">${winDays}</span> / 
-                            <span class="text-red-500">${lossDays}</span> / 
-                            <span style="color: var(--text-primary);">${breakEvenDays}</span>
+                // Safe DOM element access with fallback
+                const dailyPerformanceElement = document.getElementById('daily-performance-metrics');
+                if (dailyPerformanceElement) {
+                    dailyPerformanceElement.innerHTML = `
+                        <div class="text-left mb-2">
+                            <div class="text-2xl font-bold mb-1">
+                                <span class="text-green-500">${winDays}</span> / 
+                                <span class="text-red-500">${lossDays}</span> / 
+                                <span style="color: var(--text-primary);">${breakEvenDays}</span>
+                            </div>
+                            <div class="text-sm" style="color: var(--text-muted);">Win / Loss / Break Even Days</div>
                         </div>
-                        <div class="text-sm" style="color: var(--text-muted);">Win / Loss / Break Even Days</div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-1.5">
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Best Day</div>
-                            <div class="text-sm font-semibold text-green-500">${formatCurrency(bestDayPnl)}</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Best Day</div>
+                                <div class="text-sm font-semibold text-green-500">${formatCurrency(bestDayPnl)}</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Worst Day</div>
+                                <div class="text-sm font-semibold text-red-500">${formatCurrency(worstDayPnl)}</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Win Day</div>
+                                <div class="text-sm font-semibold text-green-500">${formatCurrency(avgWinDay)}</div>
+                            </div>
+                            <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
+                                <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Loss Day</div>
+                                <div class="text-sm font-semibold text-red-500">${formatCurrency(-avgLossDay)}</div>
+                            </div>
                         </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Worst Day</div>
-                            <div class="text-sm font-semibold text-red-500">${formatCurrency(worstDayPnl)}</div>
-                        </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Win Day</div>
-                            <div class="text-sm font-semibold text-green-500">${formatCurrency(avgWinDay)}</div>
-                        </div>
-                        <div class="p-1.5 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-color);">
-                            <div class="text-xs mb-0.5" style="color: var(--text-secondary);">Avg Loss Day</div>
-                            <div class="text-sm font-semibold text-red-500">${formatCurrency(-avgLossDay)}</div>
-                        </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    console.warn('Daily Performance metrics container not found');
+                }
 
                 // 3. Trade Execution Card
                 // Enhanced data validation and error handling
