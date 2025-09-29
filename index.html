@@ -5309,77 +5309,352 @@
                         console.log('Reports container not found');
                         return;
                     }
+                // Enhanced data validation and error handling
                 const trades = Array.isArray(appState.trades) ? appState.trades : [];
-                const closed = trades.filter(t => t.exit_price && t.exit_date);
-                const wins = closed.filter(t => ((t.exit_price - t.entry_price) * (t.quantity || 0)) > 0);
-                const losses = closed.filter(t => ((t.exit_price - t.entry_price) * (t.quantity || 0)) < 0);
-                const winRate = closed.length ? (wins.length / closed.length) * 100 : 0;
-                const grossProfit = wins.reduce((s, t) => s + ((t.exit_price - t.entry_price) * (t.quantity || 0)), 0);
-                const grossLoss = Math.abs(losses.reduce((s, t) => s + ((t.exit_price - t.entry_price) * (t.quantity || 0)), 0));
-                const profitFactor = grossLoss ? (grossProfit / grossLoss) : 0;
-                // Day aggregates
+                
+                // Safely filter closed trades with data validation
+                const closed = trades.filter(t => {
+                    try {
+                        return t && t.exit_price && t.exit_date && 
+                               typeof t.exit_price === 'number' && 
+                               typeof t.exit_date === 'string' &&
+                               !isNaN(t.exit_price);
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                // Safely filter wins and losses with data validation
+                const wins = closed.filter(t => {
+                    try {
+                        if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                            return false;
+                        }
+                        const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                        return isFinite(pnl) && pnl > 0;
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                const losses = closed.filter(t => {
+                    try {
+                        if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                            return false;
+                        }
+                        const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                        return isFinite(pnl) && pnl < 0;
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                // Safely calculate win rate with division by zero protection
+                const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+                
+                // Safely calculate gross profit with data validation
+                let grossProfit = 0;
+                if (wins.length > 0) {
+                    try {
+                        grossProfit = wins.reduce((s, t) => {
+                            try {
+                                if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return s;
+                                }
+                                const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                return isFinite(pnl) ? s + pnl : s;
+                            } catch (e) {
+                                return s;
+                            }
+                        }, 0);
+                        grossProfit = isFinite(grossProfit) ? grossProfit : 0;
+                    } catch (e) {
+                        grossProfit = 0;
+                    }
+                }
+                
+                // Safely calculate gross loss with data validation
+                let grossLoss = 0;
+                if (losses.length > 0) {
+                    try {
+                        const lossSum = losses.reduce((s, t) => {
+                            try {
+                                if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return s;
+                                }
+                                const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                return isFinite(pnl) ? s + pnl : s;
+                            } catch (e) {
+                                return s;
+                            }
+                        }, 0);
+                        grossLoss = isFinite(lossSum) ? Math.abs(lossSum) : 0;
+                    } catch (e) {
+                        grossLoss = 0;
+                    }
+                }
+                
+                // Safely calculate profit factor with division by zero protection
+                const profitFactor = grossLoss > 0 && isFinite(grossProfit) && isFinite(grossLoss) ? (grossProfit / grossLoss) : 0;
+                // Day aggregates with enhanced data validation
                 const byDay = {};
                 closed.forEach(t => {
-                    // Validate exit_date before converting
-                    const exitDate = new Date(t.exit_date);
-                    if (isNaN(exitDate.getTime())) {
-                        console.warn('Invalid exit_date in calendar:', t.exit_date, 'for trade:', t);
-                        return; // Skip this trade
+                    try {
+                        // Enhanced date validation
+                        if (!t || !t.exit_date || typeof t.exit_date !== 'string') {
+                            return;
+                        }
+                        
+                        const exitDate = new Date(t.exit_date);
+                        if (isNaN(exitDate.getTime())) {
+                            console.warn('Invalid exit_date in calendar:', t.exit_date, 'for trade:', t);
+                            return;
+                        }
+                        
+                        const d = exitDate.toISOString().slice(0,10);
+                        
+                        // Safely calculate PnL with data validation
+                        if (typeof t.exit_price === 'number' && typeof t.entry_price === 'number' && typeof t.quantity === 'number') {
+                            const grossPnl = (t.exit_price - t.entry_price) * t.quantity;
+                            const charges = (t.brokerage || 0) + (t.other_fees || 0);
+                            
+                            if (isFinite(grossPnl) && isFinite(charges)) {
+                                const pnl = grossPnl - charges;
+                                if (isFinite(pnl)) {
+                                    byDay[d] = (byDay[d] || 0) + pnl;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error processing trade for day aggregates:', e);
                     }
-                    
-                    const d = exitDate.toISOString().slice(0,10);
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0) - ((t.brokerage||0)+(t.other_fees||0));
-                    byDay[d] = (byDay[d] || 0) + pnl;
                 });
                 const days = Object.entries(byDay);
                 const bestDay = days.length ? days.reduce((a,b)=> a[1] >= b[1] ? a : b) : null;
                 const worstDay = days.length ? days.reduce((a,b)=> a[1] <= b[1] ? a : b) : null;
-                // Strategy breakdown
+                // Strategy breakdown with enhanced data validation
                 const byStrategy = {};
                 closed.forEach(t => {
-                    const key = t.strategy || 'Other';
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0) - ((t.brokerage||0)+(t.other_fees||0));
-                    byStrategy[key] = (byStrategy[key] || 0) + pnl;
+                    try {
+                        const key = t.strategy || 'Other';
+                        
+                        // Safely calculate PnL with data validation
+                        if (typeof t.exit_price === 'number' && typeof t.entry_price === 'number' && typeof t.quantity === 'number') {
+                            const grossPnl = (t.exit_price - t.entry_price) * t.quantity;
+                            const charges = (t.brokerage || 0) + (t.other_fees || 0);
+                            
+                            if (isFinite(grossPnl) && isFinite(charges)) {
+                                const pnl = grossPnl - charges;
+                                if (isFinite(pnl)) {
+                                    byStrategy[key] = (byStrategy[key] || 0) + pnl;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error processing trade for strategy breakdown:', e);
+                    }
                 });
-                const topStrategies = Object.entries(byStrategy).sort((a,b)=> b[1]-a[1]).slice(0,3);
+                
+                // Safely sort strategies with validation
+                const topStrategies = Object.entries(byStrategy)
+                    .filter(([_, pnl]) => isFinite(pnl))
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
 
-                // Calculate new comprehensive metrics
-                const totalNetProfit = wins.reduce((sum, t) => {
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0) - ((t.brokerage||0)+(t.other_fees||0));
-                    return sum + (pnl > 0 ? pnl : 0);
-                }, 0);
+                // Calculate new comprehensive metrics with enhanced data validation
+                let totalNetProfit = 0;
+                if (wins.length > 0) {
+                    try {
+                        totalNetProfit = wins.reduce((sum, t) => {
+                            try {
+                                if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return sum;
+                                }
+                                const grossPnl = (t.exit_price - t.entry_price) * t.quantity;
+                                const charges = (t.brokerage || 0) + (t.other_fees || 0);
+                                
+                                if (isFinite(grossPnl) && isFinite(charges)) {
+                                    const pnl = grossPnl - charges;
+                                    return isFinite(pnl) && pnl > 0 ? sum + pnl : sum;
+                                }
+                                return sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        totalNetProfit = isFinite(totalNetProfit) ? totalNetProfit : 0;
+                    } catch (e) {
+                        totalNetProfit = 0;
+                    }
+                }
 
-                const totalNetLoss = losses.reduce((sum, t) => {
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0) - ((t.brokerage||0)+(t.other_fees||0));
-                    return sum + (pnl < 0 ? Math.abs(pnl) : 0);
-                }, 0);
+                let totalNetLoss = 0;
+                if (losses.length > 0) {
+                    try {
+                        totalNetLoss = losses.reduce((sum, t) => {
+                            try {
+                                if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || typeof t.quantity !== 'number') {
+                                    return sum;
+                                }
+                                const grossPnl = (t.exit_price - t.entry_price) * t.quantity;
+                                const charges = (t.brokerage || 0) + (t.other_fees || 0);
+                                
+                                if (isFinite(grossPnl) && isFinite(charges)) {
+                                    const pnl = grossPnl - charges;
+                                    return isFinite(pnl) && pnl < 0 ? sum + Math.abs(pnl) : sum;
+                                }
+                                return sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        totalNetLoss = isFinite(totalNetLoss) ? totalNetLoss : 0;
+                    } catch (e) {
+                        totalNetLoss = 0;
+                    }
+                }
 
-                const totalCharges = closed.reduce((sum, t) => sum + ((t.brokerage||0)+(t.other_fees||0)), 0);
+                let totalCharges = 0;
+                if (closed.length > 0) {
+                    try {
+                        totalCharges = closed.reduce((sum, t) => {
+                            try {
+                                const brokerage = typeof t.brokerage === 'number' ? t.brokerage : 0;
+                                const otherFees = typeof t.other_fees === 'number' ? t.other_fees : 0;
+                                const charges = brokerage + otherFees;
+                                return isFinite(charges) ? sum + charges : sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        totalCharges = isFinite(totalCharges) ? totalCharges : 0;
+                    } catch (e) {
+                        totalCharges = 0;
+                    }
+                }
 
-                const totalTradeAmount = closed.reduce((sum, t) => {
-                    const entryAmount = (t.entry_price || 0) * (t.quantity || 0);
-                    const exitAmount = (t.exit_price || 0) * (t.quantity || 0);
-                    return sum + entryAmount + exitAmount;
-                }, 0);
+                let totalTradeAmount = 0;
+                if (closed.length > 0) {
+                    try {
+                        totalTradeAmount = closed.reduce((sum, t) => {
+                            try {
+                                const entryPrice = typeof t.entry_price === 'number' ? t.entry_price : 0;
+                                const exitPrice = typeof t.exit_price === 'number' ? t.exit_price : 0;
+                                const quantity = typeof t.quantity === 'number' ? t.quantity : 0;
+                                
+                                const entryAmount = entryPrice * quantity;
+                                const exitAmount = exitPrice * quantity;
+                                
+                                if (isFinite(entryAmount) && isFinite(exitAmount)) {
+                                    return sum + entryAmount + exitAmount;
+                                }
+                                return sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        totalTradeAmount = isFinite(totalTradeAmount) ? totalTradeAmount : 0;
+                    } catch (e) {
+                        totalTradeAmount = 0;
+                    }
+                }
 
-                const stopLossTrades = closed.filter(t => t.stop_loss);
-                const avgStopLoss = stopLossTrades.length > 0 ? 
-                    stopLossTrades.reduce((sum, t) => sum + (t.stop_loss || 0), 0) / stopLossTrades.length : 0;
+                // Safely calculate stop loss metrics with data validation
+                let avgStopLoss = 0;
+                const stopLossTrades = closed.filter(t => {
+                    try {
+                        return t && typeof t.stop_loss === 'number' && isFinite(t.stop_loss);
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (stopLossTrades.length > 0) {
+                    try {
+                        const stopLossSum = stopLossTrades.reduce((sum, t) => {
+                            try {
+                                const stopLoss = typeof t.stop_loss === 'number' ? t.stop_loss : 0;
+                                return isFinite(stopLoss) ? sum + stopLoss : sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        avgStopLoss = isFinite(stopLossSum) ? stopLossSum / stopLossTrades.length : 0;
+                    } catch (e) {
+                        avgStopLoss = 0;
+                    }
+                }
 
-                const targetTrades = closed.filter(t => t.target_price || t.target);
-                const avgTargetPrice = targetTrades.length > 0 ? 
-                    targetTrades.reduce((sum, t) => sum + (t.target_price || t.target || 0), 0) / targetTrades.length : 0;
+                // Safely calculate target price metrics with data validation
+                let avgTargetPrice = 0;
+                const targetTrades = closed.filter(t => {
+                    try {
+                        return t && (typeof t.target_price === 'number' || typeof t.target === 'number') && 
+                               (isFinite(t.target_price) || isFinite(t.target));
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (targetTrades.length > 0) {
+                    try {
+                        const targetSum = targetTrades.reduce((sum, t) => {
+                            try {
+                                const targetPrice = typeof t.target_price === 'number' ? t.target_price : 0;
+                                const target = typeof t.target === 'number' ? t.target : 0;
+                                const targetValue = targetPrice || target;
+                                return isFinite(targetValue) ? sum + targetValue : sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        avgTargetPrice = isFinite(targetSum) ? targetSum / targetTrades.length : 0;
+                    } catch (e) {
+                        avgTargetPrice = 0;
+                    }
+                }
 
-                const riskRewardTrades = closed.filter(t => t.stop_loss && (t.target_price || t.target));
-                const avgRiskReward = riskRewardTrades.length > 0 ? 
-                    riskRewardTrades.reduce((sum, t) => {
-                        const entryPrice = t.entry_price || 0;
-                        const stopLoss = t.stop_loss || 0;
-                        const target = t.target_price || t.target || 0;
-                        const risk = Math.abs(entryPrice - stopLoss);
-                        const reward = Math.abs(target - entryPrice);
-                        return sum + (risk > 0 ? reward / risk : 0);
-                    }, 0) / riskRewardTrades.length : 0;
+                // Safely calculate risk/reward metrics with data validation
+                let avgRiskReward = 0;
+                const riskRewardTrades = closed.filter(t => {
+                    try {
+                        return t && typeof t.stop_loss === 'number' && isFinite(t.stop_loss) && 
+                               (typeof t.target_price === 'number' || typeof t.target === 'number') &&
+                               (isFinite(t.target_price) || isFinite(t.target));
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                
+                if (riskRewardTrades.length > 0) {
+                    try {
+                        const riskRewardSum = riskRewardTrades.reduce((sum, t) => {
+                            try {
+                                const entryPrice = typeof t.entry_price === 'number' ? t.entry_price : 0;
+                                const stopLoss = typeof t.stop_loss === 'number' ? t.stop_loss : 0;
+                                const targetPrice = typeof t.target_price === 'number' ? t.target_price : 0;
+                                const target = typeof t.target === 'number' ? t.target : 0;
+                                const targetValue = targetPrice || target;
+                                
+                                if (isFinite(entryPrice) && isFinite(stopLoss) && isFinite(targetValue)) {
+                                    const risk = Math.abs(entryPrice - stopLoss);
+                                    const reward = Math.abs(targetValue - entryPrice);
+                                    
+                                    if (risk > 0 && isFinite(reward)) {
+                                        const ratio = reward / risk;
+                                        return isFinite(ratio) ? sum + ratio : sum;
+                                    }
+                                }
+                                return sum;
+                            } catch (e) {
+                                return sum;
+                            }
+                        }, 0);
+                        avgRiskReward = isFinite(riskRewardSum) ? riskRewardSum / riskRewardTrades.length : 0;
+                    } catch (e) {
+                        avgRiskReward = 0;
+                    }
+                }
 
                 const metric = (label, value, accent='') => `
                     <div class="flex items-center justify-between p-4 rounded-md" style="background-color: var(--bg-secondary);">
