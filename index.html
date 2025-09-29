@@ -5662,39 +5662,92 @@
 
                 // 6. Symbol Frequency Card
                 const symbolStats = {};
-                closed.forEach(t => {
-                    const symbol = t.asset || 'Unknown';
-                    if (!symbolStats[symbol]) {
-                        symbolStats[symbol] = { total: 0, wins: 0, pnl: 0 };
-                    }
-                    symbolStats[symbol].total++;
-                    const pnl = (t.exit_price - t.entry_price) * (t.quantity || 0);
-                    symbolStats[symbol].pnl += pnl;
-                    if (pnl > 0) symbolStats[symbol].wins++;
-                });
+                
+                // Enhanced data validation and error handling
+                if (closed && Array.isArray(closed) && closed.length > 0) {
+                    closed.forEach(t => {
+                        try {
+                            // Validate trade object
+                            if (!t || typeof t !== 'object') {
+                                return;
+                            }
+                            
+                            const symbol = t.asset || 'Unknown';
+                            if (!symbolStats[symbol]) {
+                                symbolStats[symbol] = { total: 0, wins: 0, pnl: 0 };
+                            }
+                            symbolStats[symbol].total++;
+                            
+                            // Safely calculate PnL with data validation
+                            if (typeof t.exit_price === 'number' && 
+                                typeof t.entry_price === 'number' && 
+                                typeof t.quantity === 'number' && 
+                                t.quantity > 0) {
+                                
+                                const pnl = (t.exit_price - t.entry_price) * t.quantity;
+                                
+                                // Validate PnL calculation result
+                                if (isFinite(pnl)) {
+                                    symbolStats[symbol].pnl += pnl;
+                                    if (pnl > 0) symbolStats[symbol].wins++;
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('Error processing trade for symbol frequency:', e);
+                        }
+                    });
+                }
 
+                // Safe calculation of symbol frequency with division by zero protection
                 const symbolFrequency = Object.entries(symbolStats)
-                    .map(([symbol, stats]) => ({
-                        symbol,
-                        percentage: (stats.total / closed.length) * 100,
-                        pnl: stats.pnl,
-                        winRate: (stats.wins / stats.total) * 100
-                    }))
+                    .map(([symbol, stats]) => {
+                        try {
+                            const percentage = closed.length > 0 ? (stats.total / closed.length) * 100 : 0;
+                            const winRate = stats.total > 0 ? (stats.wins / stats.total) * 100 : 0;
+                            
+                            return {
+                                symbol,
+                                percentage: isFinite(percentage) ? percentage : 0,
+                                pnl: isFinite(stats.pnl) ? stats.pnl : 0,
+                                winRate: isFinite(winRate) ? winRate : 0
+                            };
+                        } catch (e) {
+                            return {
+                                symbol,
+                                percentage: 0,
+                                pnl: 0,
+                                winRate: 0
+                            };
+                        }
+                    })
                     .sort((a, b) => b.percentage - a.percentage);
 
-                const mostTraded = symbolFrequency[0];
-                const mostProfitable = symbolFrequency.sort((a, b) => b.pnl - a.pnl)[0];
-                const leastProfitable = symbolFrequency.sort((a, b) => a.pnl - b.pnl)[0];
-                const highestWinRate = symbolFrequency.sort((a, b) => b.winRate - a.winRate)[0];
-                const lowestWinRate = symbolFrequency.sort((a, b) => a.winRate - b.winRate)[0];
+                // Safe array access with validation
+                const mostTraded = symbolFrequency.length > 0 ? symbolFrequency[0] : null;
+                
+                // Create copies for sorting to avoid modifying original array
+                const mostProfitable = symbolFrequency.length > 0 ? 
+                    [...symbolFrequency].sort((a, b) => b.pnl - a.pnl)[0] : null;
+                const leastProfitable = symbolFrequency.length > 0 ? 
+                    [...symbolFrequency].sort((a, b) => a.pnl - b.pnl)[0] : null;
+                const highestWinRate = symbolFrequency.length > 0 ? 
+                    [...symbolFrequency].sort((a, b) => b.winRate - a.winRate)[0] : null;
+                const lowestWinRate = symbolFrequency.length > 0 ? 
+                    [...symbolFrequency].sort((a, b) => a.winRate - b.winRate)[0] : null;
 
-                document.getElementById('symbol-frequency-metrics').innerHTML = `
-                    ${createMetricRow('Most Traded', mostTraded ? `${mostTraded.symbol} (${mostTraded.percentage.toFixed(0)}%)` : '—')}
-                    ${createMetricRow('Most Profitable', mostProfitable ? `${mostProfitable.symbol} (${formatCurrency(mostProfitable.pnl)})` : '—', 'text-green-500')}
-                    ${createMetricRow('Least Profitable', leastProfitable ? `${leastProfitable.symbol} (${formatCurrency(leastProfitable.pnl)})` : '—', 'text-red-500')}
-                    ${createMetricRow('Highest Win Rate', highestWinRate ? `${highestWinRate.symbol} (${highestWinRate.winRate.toFixed(1)}%)` : '—', 'text-green-500')}
-                    ${createMetricRow('Lowest Win Rate', lowestWinRate ? `${lowestWinRate.symbol} (${lowestWinRate.winRate.toFixed(1)}%)` : '—', 'text-red-500')}
-                `;
+                // Safe DOM element access with fallback
+                const symbolFrequencyElement = document.getElementById('symbol-frequency-metrics');
+                if (symbolFrequencyElement) {
+                    symbolFrequencyElement.innerHTML = `
+                        ${createMetricRow('Most Traded', mostTraded ? `${mostTraded.symbol} (${mostTraded.percentage.toFixed(0)}%)` : '—')}
+                        ${createMetricRow('Most Profitable', mostProfitable ? `${mostProfitable.symbol} (${formatCurrency(mostProfitable.pnl)})` : '—', 'text-green-500')}
+                        ${createMetricRow('Least Profitable', leastProfitable ? `${leastProfitable.symbol} (${formatCurrency(leastProfitable.pnl)})` : '—', 'text-red-500')}
+                        ${createMetricRow('Highest Win Rate', highestWinRate ? `${highestWinRate.symbol} (${highestWinRate.winRate.toFixed(1)}%)` : '—', 'text-green-500')}
+                        ${createMetricRow('Lowest Win Rate', lowestWinRate ? `${lowestWinRate.symbol} (${lowestWinRate.winRate.toFixed(1)}%)` : '—', 'text-red-500')}
+                    `;
+                } else {
+                    console.warn('Symbol Frequency metrics container not found');
+                }
 
                 // 7. Capital Usage Card - Flawless Implementation
                 const capitalUsageElement = document.getElementById('capital-usage-metrics');
