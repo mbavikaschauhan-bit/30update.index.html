@@ -6705,15 +6705,16 @@
                                 }
                             });
                             
-                            // Safely calculate wins with data validation
+                            // Safely calculate wins with data validation using consistent P&L calculation
                             const dayWins = dayTrades.filter(t => {
                                 try {
                                     // Validate trade data before calculation
                                     if (!t || typeof t.exit_price !== 'number' || typeof t.entry_price !== 'number' || !t.quantity) {
                                         return false;
                                     }
-                                    const pnl = (t.exit_price - t.entry_price) * t.quantity;
-                                    return pnl > 0;
+                                    // Use the same calculateNetPnl function used throughout the app for consistency
+                                    const pnl = calculateNetPnl(t);
+                                    return isFinite(pnl) && pnl > 0;
                                 } catch (e) {
                                     return false;
                                 }
