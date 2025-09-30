@@ -6613,19 +6613,36 @@
                                             return 0;
                                         }
                                         
-                                        const risk = Math.abs(tradePnL);
-                                        const reward = Math.max(0, tradePnL);
+                                        // Robust R:R calculation using actual trade data
+                                        // This follows the same pattern as other R:R calculations in the codebase
                                         
-                                        // Safe R:R calculation with division by zero protection
-                                        if (risk > 0 && isFinite(reward) && isFinite(risk)) {
-                                            const rr = reward / risk;
-                                            return isFinite(rr) ? rr : 0;
+                                        const entryPrice = trade.entry_price || 0;
+                                        const stopLoss = trade.stop_loss || (entryPrice * 0.98); // Default 2% stop loss
+                                        const target = trade.target || trade.target_price || (entryPrice * 1.02); // Default 2% target
+                                        
+                                        const risk = Math.abs(entryPrice - stopLoss);
+                                        
+                                        // Calculate actual R:R based on actual performance vs intended risk
+                                        if (risk > 0) {
+                                            if (tradePnL > 0) {
+                                                // Winning trade: R:R = actual_profit / intended_risk
+                                                const actualRR = tradePnL / risk;
+                                                // Cap extreme values to prevent unrealistic R:R ratios
+                                                return isFinite(actualRR) ? Math.min(actualRR, 50) : 0;
+                                            } else if (tradePnL < 0) {
+                                                // Losing trade: R:R = -actual_loss / intended_risk
+                                                const actualLoss = Math.abs(tradePnL);
+                                                const actualRR = -(actualLoss / risk);
+                                                // Cap extreme values to prevent unrealistic R:R ratios
+                                                return isFinite(actualRR) ? Math.max(actualRR, -50) : 0;
+                                            }
                                         }
+                                        
                                         return 0;
                                     } catch (e) {
                                         return 0; // Return 0 for any calculation errors
                                     }
-                                }).filter(rr => isFinite(rr) && rr >= 0); // Filter out invalid R:R ratios
+                                }).filter(rr => isFinite(rr)); // Filter out invalid R:R ratios (allow negative values for losses)
                                 
                                 // Safe average calculation with validation
                                 if (individualRRs.length > 0) {
@@ -6649,7 +6666,13 @@
                 if (weekdayRRElement) {
                     weekdayRRElement.innerHTML = weekdaysOrder
                         .filter(day => weekdayRR[day] !== undefined)
-                        .map(day => createMetricRow(day, `${weekdayRR[day].toFixed(2)}R`, weekdayRR[day] >= 1 ? 'text-green-500' : 'text-white'))
+                        .map(day => {
+                            const rr = weekdayRR[day];
+                            let colorClass = 'text-white';
+                            if (rr > 1) colorClass = 'text-green-500';
+                            else if (rr < 0) colorClass = 'text-red-500';
+                            return createMetricRow(day, `${rr.toFixed(2)}R`, colorClass);
+                        })
                         .join('') || '<div class="text-sm" style="color: var(--text-muted);">No R:R data available</div>';
                 } else {
                     console.warn('Weekday R:R metrics container not found');
